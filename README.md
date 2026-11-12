@@ -1,23 +1,61 @@
-# Lab3-05_Event_Driven_Queue
+# Lab 3-05: Kiến Trúc Hàng Đợi Hướng Sự Kiện FreeRTOS (Event Driven Queue)
 
-**Kiến trúc Hướng sự kiện (Event-Driven) & Hàng đợi FreeRTOS Queue**
+> **Phân hệ:** C&DH (Command & Data Handling)  
+> **Thư viện yêu cầu:** `PTITCube Library v1.1.0`  
+> **Nền tảng:** PlatformIO / ESP32-WROOM-32 (OBC)
 
-Bài thực hành thuộc Phân hệ C&DH (Lab 3) trong hệ thống PTITCube.
+---
 
-## 1. Mục tiêu
-- Hiểu và ứng dụng kiến trúc **Hướng sự kiện (Event-Driven)** thay thế cho kỹ thuật thăm dò vòng lặp tuần tự (Busy Polling) nhằm tiết kiệm năng lượng cho CubeSat.
-- Sử dụng **FreeRTOS Queue** (`QueueHandle_t`) để truyền nhận dữ liệu bất đồng bộ một cách an toàn giữa nhiều nguồn phát (Event Producers) và tác vụ xử lý trung tâm (Event Consumer).
-- Thực hành đẩy sự kiện từ ngắt phần cứng ISR (`xQueueSendFromISR`) và từ các tác vụ phần mềm (`xQueueSend`).
-- Đưa tác vụ xử lý vào trạng thái ngủ sâu (`portMAX_DELAY` - Blocked State) khi không có sự kiện, giảm thiểu 100% thời gian CPU nhàn rỗi.
+## 📖 1. Mục Tiêu & Mô Tả Bài Thực Hành
 
-## 2. Phần cứng sử dụng
-- **ESP32 NodeMCU OBC**
-- **LED báo hiệu:** GPIO 2 (Lab 1).
-- **Nút nhấn sự kiện ngắt:** GPIO 4 (`INPUT_PULLUP`, Lab 1).
-- **Serial Monitor:** Cổng USB UART (Baudrate: `115200`).
+Sử dụng hàng đợi xQueue để truyền nhận thông điệp phi đồng bộ giữa các tác vụ, bảo đảm tính toàn vẹn dữ liệu và tránh xung đột tài nguyên.
 
-## 3. Các nguồn phát sự kiện (Producers) & Xử lý (Consumer)
-1. **Producer 1 (Ngắt phần cứng nút nhấn GPIO 4):** Bắt sườn xuống (Falling Edge), đóng gói `EVENT_BUTTON_INTERRUPT` đẩy vào Queue qua ISR.
-2. **Producer 2 (Viễn trắc giả lập):** Tác vụ chạy chu kỳ 1000ms sinh số liệu nhiệt độ mạch C&DH ngẫu nhiên (20-35°C). Nếu vượt ngưỡng > 30°C, đẩy `EVENT_TELEMETRY_ALERT` vào Queue.
-3. **Producer 3 (Lệnh nối tiếp UART):** Nhận ký tự gõ từ Serial Monitor, đóng gói `EVENT_COMMAND_RECEIVED` đẩy vào Queue.
-4. **Consumer (Event Dispatcher Task):** Chờ nhận sự kiện từ Queue, giải mã và thực thi hành vi tương ứng (đảo LED, nháy LED cảnh báo, xác nhận lệnh).
+---
+
+## 🔌 2. Sơ Đồ Chân Phần Cứng (Hardware Pinout)
+
+| Cơ cấu | Chức năng | Mô tả |
+| :--- | :--- | :--- |
+| FreeRTOS Queue | xQueueHandle | Truyền cấu trúc bản tin viễn trắc giữa Producer và Consumer |
+
+---
+
+## 🛠️ 3. Cấu Hình Phần Mềm & Thư Viện
+
+- **Thư viện cốt lõi:** Thư mục `lib/PTITCube` tích hợp sẵn bộ thư viện phiên bản mới nhất `v1.1.0` với các phân hệ phân lớp:
+  - `CDH`: Quản lý luồng xuất nhập dữ liệu `cdh` (Stream inheritance) và hệ thống tệp FAT32 trên thẻ nhớ MicroSD.
+  - `EPS`: Quản lý năng lượng, đọc IC MAX17048 qua I2C.
+  - `Sensor`: Đọc cụm cảm biến môi trường BMP280, cảm biến quán tính 6-DoF MPU6500, từ kế QMC5883L và định vị GNSS L76X.
+  - `COM`: Quản lý module vô tuyến LoRa Ebyte E32 qua giao tiếp UART2.
+- **Kênh giám sát Console:**
+  - **Công cụ:** `cdh (PTIT_CDH stream - 115200 baud)`
+  - **Tốc độ Baud:** `115200 bps`
+  - **Lưu ý chuẩn hóa:** Kể từ Lab 3, mọi luồng in debug console được chuẩn hóa qua đối tượng `cdh` (`PTIT_CDH cdh;`) kế thừa trực tiếp từ lớp `Stream`/`Print` của Arduino, thay thế hoàn toàn cho `Serial` thông thường.
+
+---
+
+## 🚀 4. Hướng Dẫn Biên Dịch & Nạp Firmware
+
+Sử dụng **PlatformIO CLI** hoặc giao diện **VSCode / PlatformIO IDE**:
+
+```bash
+# 1. Di chuyển vào thư mục dự án
+cd Lab3-05_Event_Driven_Queue
+
+# 2. Biên dịch mã nguồn
+pio run
+
+# 3. Nạp firmware vào vi điều khiển vệ tinh
+pio run -t upload
+
+# 4. Mở cửa sổ giám sát Serial Monitor
+pio device monitor -b 115200
+```
+
+---
+
+## 📝 5. Lưu Ý Kỹ Thuật
+
+- Ngăn ngừa Race Condition giữa tác vụ thu thập cảm biến và tác vụ truyền tin.
+- Không chèn các lệnh in `println()` trang trí dư thừa làm nghẽn bộ đệm UART khi vệ tinh vận hành ở tần số cao.
+- Kiểm tra kết nối cáp USB-UART và nguồn pin trước khi thực hiện nạp code.
