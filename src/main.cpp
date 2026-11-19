@@ -76,17 +76,17 @@ void eventDispatcherTask(void* pvParameters) {
                 case EVENT_BUTTON_PRESSED:
                     ledState = !ledState;
                     digitalWrite(LED_PIN, ledState ? HIGH : LOW);
-                    cdh.printf("[EVENT] Button pressed (t=%lums) -> LED: %s\n",
+                    cdh.printf("EVENT: Button pressed (t=%lums) -> LED: %s\n",
                                receivedEvent.timestamp, ledState ? "ON" : "OFF");
                     break;
 
                 case EVENT_TELEMETRY_ALERT:
-                    cdh.printf("[EVENT] Temp Alert: %d C (t=%lums)\n",
+                    cdh.printf("EVENT: Temp Alert: %d C (t=%lums)\n",
                                receivedEvent.param, receivedEvent.timestamp);
                     break;
 
                 case EVENT_SERIAL_COMMAND:
-                    cdh.printf("[EVENT] Cmd: '%c' (t=%lums)\n",
+                    cdh.printf("EVENT: Cmd: '%c' (t=%lums)\n",
                                (char)receivedEvent.param, receivedEvent.timestamp);
                     break;
             }
@@ -105,11 +105,11 @@ void setup() {
 
     systemEventQueue = xQueueCreate(10, sizeof(SystemEvent));
     if (systemEventQueue == NULL) {
-        cdh.println("[ERROR] Queue creation failed!");
+        cdh.println("ERROR: Queue creation failed!");
         return;
     }
 
-    cdh.println("[CDH] Event-Driven Queue Ready.");
+    cdh.println("CDH: Event-Driven Queue Ready.");
 
     xTaskCreatePinnedToCore(eventDispatcherTask,  "EventDispatcher", 2048, NULL, 3, NULL, 1);
     xTaskCreatePinnedToCore(telemetryMonitorTask, "TelemMonitor",    2048, NULL, 1, NULL, 1);
