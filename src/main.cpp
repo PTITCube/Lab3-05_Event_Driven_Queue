@@ -86,7 +86,6 @@ void setup() {
     attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
 
     eventQueue = xQueueCreate(10, sizeof(SystemEvent));
-    cdh.println("Event: Queue Ready.");
 
     xTaskCreatePinnedToCore(dispatcherTask, "Dispatcher", 2048, NULL, 3, NULL, 1);
     xTaskCreatePinnedToCore(sensorTask,     "Sensor",     2048, NULL, 1, NULL, 1);
