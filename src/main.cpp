@@ -21,22 +21,20 @@ struct SystemEvent {
     int32_t value;
 };
 
-static QueueHandle_t eventQueue = NULL;
+PTIT_Queue<SystemEvent> eventQueue;
 
 void IRAM_ATTR buttonISR() {
     SystemEvent evt = { EVENT_BUTTON, millis(), 0 };
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    xQueueSendFromISR(eventQueue, &evt, &xHigherPriorityTaskWoken);
-    if (xHigherPriorityTaskWoken) portYIELD_FROM_ISR();
+    eventQueue.sendFromISR(&evt);
 }
 
 void sensorTask(void* pvParameters) {
     for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        cdh.delayMs(1000);
         int temp = random(20, 35);
         if (temp > 30) {
             SystemEvent evt = { EVENT_TEMP_ALERT, millis(), temp };
-            xQueueSend(eventQueue, &evt, 0);
+            eventQueue.send(&evt);
         }
     }
 }
@@ -48,10 +46,10 @@ void serialTask(void* pvParameters) {
             str.trim();
             if (str.length() > 0) {
                 SystemEvent evt = { EVENT_COMMAND, millis(), str[0] };
-                xQueueSend(eventQueue, &evt, 0);
+                eventQueue.send(&evt);
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(50));
+        cdh.delayMs(50);
     }
 }
 
@@ -60,7 +58,7 @@ void dispatcherTask(void* pvParameters) {
     bool ledState = false;
 
     for (;;) {
-        if (xQueueReceive(eventQueue, &evt, portMAX_DELAY) == pdTRUE) {
+        if (eventQueue.receive(&evt)) {
             switch (evt.type) {
                 case EVENT_BUTTON:
                     ledState = !ledState;
@@ -85,11 +83,11 @@ void setup() {
     pinMode(BUTTON_PIN, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
 
-    eventQueue = xQueueCreate(10, sizeof(SystemEvent));
+    eventQueue.init(10);
 
-    xTaskCreatePinnedToCore(dispatcherTask, "Dispatcher", 2048, NULL, 3, NULL, 1);
-    xTaskCreatePinnedToCore(sensorTask,     "Sensor",     2048, NULL, 1, NULL, 1);
-    xTaskCreatePinnedToCore(serialTask,     "Serial",     2048, NULL, 2, NULL, 1);
+    cdh.createTask(dispatcherTask, "Dispatcher", 2048, 3);
+    cdh.createTask(sensorTask,     "Sensor",     2048, 1);
+    cdh.createTask(serialTask,     "Serial",     2048, 2);
 }
 
 void loop() {
